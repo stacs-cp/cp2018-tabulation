@@ -1,0 +1,37 @@
+#!/bin/bash
+
+for i in problems/* ; do
+for j in $i/*.eprime ; do
+for k in $i/*.param ; do
+
+for run in 1 2 3 4 5 ; do
+
+if [ ! -e $j-$(basename $k).baselinechuf.$run.infor ] ; then
+echo "../../savilerow -dryruns -timelimit 7200000 $j $k -out-minion $j-$(basename $k).minion.baselinechuf.$run -run-solver -chuffed -chuffed-bin ~/bin/fzn-chuffed -solver-options \"--time-out 21600\" -out-info $j-$(basename $k).baselinechuf.$run.info -out-gecode $j-$(basename $k).baselinechuf.$run.fzn $@";
+fi
+
+if [ ! -e $j-$(basename $k).tabulatechuf.$run.infor ] ; then
+echo "../../savilerow -dryruns -timelimit 7200000 $j $k -out-minion $j-$(basename $k).minion.tabulatechuf.$run -make-short-tab 3 -run-solver -chuffed -chuffed-bin ~/bin/fzn-chuffed -solver-options \"--time-out 21600\" -out-info $j-$(basename $k).tabulatechuf.$run.info -out-gecode $j-$(basename $k).tabulatechuf.$run.fzn $@";
+fi
+
+if [ ! -e $j-$(basename $k).baselinect.$run.infor ] ; then
+echo "../../savilerow -dryruns -timelimit 7200000 $j $k -out-minion $j-$(basename $k).minion.baselinect.$run -run-solver -solver-options \"-cpulimit 21600 -varorder conflict\" -out-info $j-$(basename $k).baselinect.$run.info $@";
+fi
+
+if [ ! -e $j-$(basename $k).tabulatect.$run.infor ] ; then
+echo "../../savilerow -dryruns -timelimit 7200000 $j $k -out-minion $j-$(basename $k).minion.tabulatect.$run -make-short-tab 3 -run-solver -solver-options \"-cpulimit 21600 -varorder conflict\" -out-info $j-$(basename $k).tabulatect.$run.info $@";
+fi
+
+if [ ! -e $j-$(basename $k).baselinetrie.$run.infor ] ; then
+echo "../../savilerow -dryruns -timelimit 7200000 $j $k -out-minion $j-$(basename $k).minion.baselinetrie.$run -run-solver -solver-options \"-cpulimit 21600\" -out-info $j-$(basename $k).baselinetrie.$run.info $@";
+fi
+
+if [ ! -e $j-$(basename $k).tabulatetrie.$run.infor ] ; then
+echo "../../savilerow -dryruns -timelimit 7200000 $j $k -out-minion $j-$(basename $k).minion.tabulatetrie.$run -make-short-tab 3 -run-solver -solver-options \"-cpulimit 21600\" -out-info $j-$(basename $k).tabulatetrie.$run.info $@";
+fi
+
+done
+done
+done
+done
+

@@ -1,0 +1,325 @@
+package savilerow.model;
+/*
+
+    Savile Row http://savilerow.cs.st-andrews.ac.uk/
+    Copyright (C) 2014, 2015 Patrick Spracklen and Peter Nightingale
+    
+    This file is part of Savile Row.
+    
+    Savile Row is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+    
+    Savile Row is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+    
+    You should have received a copy of the GNU General Public License
+    along with Savile Row.  If not, see <http://www.gnu.org/licenses/>.
+
+*/
+
+import savilerow.CmdFlags;
+import savilerow.expression.*;
+
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.StringTokenizer;
+
+/*
+    This class acts as a scribe that creates the CMPL file, which is then parsed by the solver
+ */
+public class CMPL {
+    public static final int GREATER_OR_EQUAL = 1;
+    public static final int LESS_THAN_OR_EQUAL = 2;
+    public static final int EQUAL = 3;
+
+    public static boolean needToRunSolver = true;
+    public static boolean existsSolution = true;
+
+    public final SymbolTable st;
+    private BufferedWriter outstream;
+    private boolean hasObjective = false;
+
+    //integer variables that have been broken down into binaries
+    private final HashMap<String, Domain> directEncodedVariables;
+    //the variable names that the model already knows about
+    private final ArrayList<String> variables;
+    //to be ignored when parsing the solution back into eprime
+    //has to be static to be referenced by the solver class
+    public static ArrayList<String> auxVars;
+
+    //the different sections have to be annotated in CMPL, this is to keep track of the current section of the file
+    private int currentSection = 0;
+    private static final int PARAMETERS = 1;
+    private static final int VARIABLES = 2;
+    private static final int OBJECTIVES = 3;
+    private static final int CONSTRAINS = 4;
+
+    public CMPL(SymbolTable st) {
+        this.st = st;
+        directEncodedVariables = new HashMap<>();
+        auxVars = new ArrayList<>();
+        variables = new ArrayList<>();
+        try {
+            outstream = new BufferedWriter(new FileWriter(CmdFlags.cmplfile));
+        } catch (IOException e) {
+            CmdFlags.errorExit("Failed to open or write to CMPL output file.");
+        }
+    }
+
+    private void ensureSection(int section) throws IOException {
+        if (currentSection != section) {
+            currentSection = section;
+            switch (section) {
+                case PARAMETERS: {
+                    outstream.write("parameters:");
+                    break;
+                }
+                case VARIABLES: {
+                    outstream.write("variables:");
+                    break;
+                }
+                case OBJECTIVES: {
+                    outstream.write("objectives:");
+                    break;
+                }
+                case CONSTRAINS: {
+                    outstream.write("constraints:");
+                    break;
+                }
+            }
+            outstream.newLine();
+        }
+    }
+
+    public void addIntVariable(String identifier) throws IOException {
+        Domain dom = (Domain)st.getDomain(identifier);
+        if (!(variables.contains(identifier))) {
+            //to get rid of number constants
+            try {
+                Integer.parseInt(identifier);
+            } catch (NumberFormatException ex) {
+                //else the model already knows about the variable and there is no need to declare it again
+                ensureSection(VARIABLES);
+                if (dom != null) {
+                    if (dom instanceof IntegerDomain) {
+                        variables.add(identifier);
+                        long min = dom.getValueSet().get(0);
+                        long max = dom.getValueSet().get(dom.getValueSet().size() - 1);
+                        outstream.write("\t" + identifier + " : integer [");
+                        outstream.write(String.valueOf(min));
+                        outstream.write("..");
+                        outstream.write(String.valueOf(max));
+                        outstream.write("];");
+                        outstream.newLine();
+                        Less less1;
+                        Less less2;
+                        Or or;
+                        //for every integer in the range that is not in the domain have to state that the variable is not equal to that value
+                        for (long i = min; i < max; i++) {
+                            if (!(dom.getValueSet().contains(i))) {
+                                less1 = new Less(new Identifier(st.m, identifier), new NumberConstant(i));
+                                less2 = new Less(new NumberConstant(i), new Identifier(st.m, identifier));
+                                or = new Or(less1, less2);
+                                or.toIP(this, false);
+                            }
+                        }
+                    } else if (dom instanceof BooleanDomain) {
+                        addBinaryVariable(identifier);
+                    }
+                }
+                //this means an unbounded domain
+                else {
+                    variables.add(identifier);
+                    outstream.write("\t" + identifier + " : integer;");
+                    outstream.newLine();
+                }
+            }
+        }
+    }
+
+    //adds a variable encoded as an array of booleans, with the number of the true bool representing the value of the
+    //variable
+    public void addVariableDirectEncoding(String identifier, Domain domain) throws IOException{
+        ArrayList<Long> coefficients = new ArrayList<>();
+        ArrayList<String> variables = new ArrayList<>();
+
+        if (!directEncodedVariables.containsKey(identifier)) {
+            directEncodedVariables.put(identifier, domain);
+            String variableName;
+            for (int i = 0; i < domain.getValueSet().size(); i++) {
+                coefficients.add(1L);
+                variableName = makeAuxVarName(identifier, domain.getValueSet().get(i));
+                variables.add(variableName);
+                auxVars.add(variableName);
+                addBinaryVariable(variableName);
+            }
+
+            //adds a line that forces only one of the values to be true
+            addConstraint(coefficients, variables, EQUAL, 1);
+
+            //adds a line that enforces the right boolean to be true
+            coefficients = new ArrayList<>();
+            for (int i = 0; i < domain.getValueSet().size(); i++) {
+                coefficients.add(domain.getValueSet().get(i));
+            }
+            coefficients.add(-1L);
+            variables.add(identifier);
+            addConstraint(coefficients, variables, EQUAL, 0);
+        }
+    }
+
+    public void addBinaryVariable(String identifier) throws IOException {
+        if (!(variables.contains(identifier))) {
+            variables.add(identifier);
+            ensureSection(VARIABLES);
+            outstream.write("\t" + identifier + " : binary;");
+            outstream.newLine();
+        }
+    }
+
+    //writes a linear (in)equality with the sum of variables multiplied by their coefficients on the left, the operator
+    //as a choice between <=, >= and = and the integer on the right hand side
+    public void addConstraint(ArrayList<Long> coefficients, ArrayList<String> variables, int operator, long RHS) throws IOException{
+        ensureSection(CONSTRAINS);
+        assert coefficients.size() == variables.size();
+        StringBuilder sb = new StringBuilder();
+        sb.append("\t");
+
+        //extract all the minus signs from the identifiers to coefficients and substitute boolean literals for 0 or 1
+        Long l;
+        String s;
+        for (int i = 0; i < variables.size(); i++) {
+            try {
+                l = Long.parseLong(variables.get(i));
+                if (l < 0) {
+                    s = variables.get(i).replaceAll("-", "");
+                    variables.remove(i);
+                    variables.add(i, s);
+                    //recycle the variable;
+                    l = coefficients.get(i);
+                    coefficients.remove(i);
+                    coefficients.add(i, -l);
+                }
+            }
+            catch (NumberFormatException ignored) {
+            }
+
+            if (variables.get(i).equals("true")) {
+                variables.remove(i);
+                variables.add(i, "1");
+            }
+            if (variables.get(i).equals("false")) {
+                variables.remove(i);
+                variables.add(i, "0");
+            }
+        }
+
+        //this is in case the first coefficient is negative
+        boolean first = true;
+        for (int i = 0; i < coefficients.size(); i++) {
+            if (first && coefficients.get(0) < 0) {
+                sb.append(coefficients.get(0));
+                sb.append("*");
+                first = false;
+            }
+            else {
+                //if the coefficient is 1 or -1, omit it
+                if (coefficients.get(i) != 1 && coefficients.get(i) != -1 ) {
+                    sb.append(Math.abs(coefficients.get(i)));
+                    sb.append("*");
+                }
+            }
+
+            sb.append(variables.get(i));
+            if (i < coefficients.size()-1) {
+                //write the correct operator depending on the sign of the coefficient
+                if (coefficients.get(i+1) >= 0) {
+                    sb.append("+");
+                }
+                else {
+                    sb.append("-");
+                }
+            }
+        }
+        sb.append(makeOperator(operator));
+        sb.append(RHS);
+        sb.append(";");
+        outstream.write(sb.toString());
+        outstream.newLine();
+    }
+
+    public void addObjective(String varName, boolean maximise) throws IOException {
+        hasObjective = true;
+        ensureSection(OBJECTIVES);
+        outstream.write("\t" + varName + "->");
+        if (maximise) {
+            outstream.write("max;");
+        }
+        else {
+            outstream.write("min;");
+        }
+        outstream.newLine();
+    }
+
+    public void addComment(String comment) throws IOException {
+        outstream.write("###" + comment + "###");
+        outstream.newLine();
+    }
+
+    private void writeEmptyObjective() throws IOException{
+        //horrible hack to make cbc accept the problem even if it doesn't have an objective function
+        addObjective("0", false);
+    }
+
+    public void writeAlwaysSolvable() {
+        needToRunSolver = false;
+        existsSolution = true;
+    }
+
+    public void writeNeverSolvable() {
+        needToRunSolver = false;
+        existsSolution = false;
+    }
+
+    private static String makeOperator(int operator) {
+        switch (operator) {
+            case LESS_THAN_OR_EQUAL: {
+                return "<=";
+            }
+            case GREATER_OR_EQUAL: {
+                return ">=";
+            }
+            case EQUAL: {
+                return "=";
+            }
+            default: {
+                CmdFlags.errorExit("Unknown operator");
+            }
+        }
+        return "";
+    }
+
+    public static String makeAuxVarName(String varName, long value) {
+        String auxVarName = varName + "value" + String.valueOf(value);
+        auxVarName = auxVarName.replaceAll("-", "neg");
+        return auxVarName;
+    }
+
+    public void finalise() throws IOException {
+        //cbc doesn't accept the file without an objective function
+        if (!hasObjective) writeEmptyObjective();
+        outstream.close();
+        CmdFlags.println("Created CMPL file");
+    }
+
+    public void reopen() throws IOException {
+        outstream=new BufferedWriter(new FileWriter(CmdFlags.cmplfile, true));
+    }
+}

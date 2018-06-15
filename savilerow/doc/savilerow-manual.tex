@@ -1,0 +1,641 @@
+\documentclass[a4paper]{article}
+\usepackage[top=4cm, bottom=4cm, left=2cm, right=2cm]{geometry} 
+\usepackage{fancyhdr}
+\usepackage{url}
+\usepackage{xspace}
+\usepackage{times}
+\pagestyle{fancy}
+
+\newcommand{\eprime}{{\sc Essence Prime}\xspace}
+\newcommand{\savilerow}{{\sc Savile Row}\xspace}
+
+\newcommand{\version}{1.6.5\xspace}
+
+\lhead{}
+\rhead{\thepage}
+\lfoot{}
+\cfoot{\savilerow Manual \version}
+\rfoot{}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+
+
+
+\begin{document}
+
+\title{\savilerow Manual \version}
+
+\author{Peter Nightingale}
+
+\date{}
+
+\maketitle
+
+
+\section{Introduction}
+
+\savilerow is a constraint modelling tool. It provides a 
+high-level language for the user to specify their constraint problem, and 
+automatically translates that language to the input language of a constraint 
+solver. \savilerow is a research tool, designed to enable research into 
+reformulation of constraint models, therefore it is designed for flexibility. 
+It is easy to add new transformation rules and develop new translation pipelines. 
+
+This manual covers the basics of using \savilerow. It does not cover adding
+new rules or translation pipelines. 
+\savilerow reads the \eprime modelling language, which is described in the 
+\eprime description. \savilerow converts constraint models expressed in \eprime 
+into the solver input format, in a process that has some similarities to 
+compiling a high-level programming language. Like a compiler, \savilerow applies
+some optimisations to the model (for example, constant folding and common subexpression elimination).  
+
+
+
+\subsection{Problem Classes and Instances}
+
+The distinction between \textit{problem classes} and \textit{problem instances} 
+will be important in this manual. It is easiest to start with an example. 
+Sudoku in general is a problem class, and a particular Sudoku puzzle is an 
+instance of that class. The problem class is described by writing down the 
+rules of Sudoku, i.e. that we have a $9 \times 9$ grid and that each row, 
+column and subsquare must contain all values $1..9$. A particular instance is 
+described by taking the class and adding the clues, i.e.\ filling in some of 
+the squares. The set of clues is a \textit{parameter} of the class -- in this
+case the only parameter. Adding the parameters to a class to make a problem 
+instance is called \textit{instantiation}. 
+
+In typical use, \savilerow will read a problem class file and also a parameter file, 
+both written in  \eprime. It will instantiate the problem class and unroll all quantifiers
+and matrix comprehensions, then perform reformulations and flattening of nested expressions before 
+producing output for a constraint solver. 
+
+\subsection{Translation Pipelines and Solver Backends}\label{sub:backends}
+
+The current version of \savilerow has two translation pipelines. The first 
+works on problem instances only. Every parameter of the problem class must be 
+given a value in the parameter file. Output produced by this pipeline may be 
+entirely flattened or it may still contain some nested expressions depending on the
+output language. 
+
+\begin{itemize}
+\item Minion -- Output is produced in the Minion 3 language for Minion 1.8 or later. 
+The model produced is not entirely flat, it makes use of nested \texttt{watched-or} and \texttt{watched-and}
+constraints.
+\item Gecode -- Output is produced for Gecode in the entirely flat, instance-level language
+Flatzinc for use by the \texttt{fzn-gecode} tool. 
+\item SAT -- Output is produced in DIMACS format for use with any SAT solver. 
+\item Minizinc -- Output is produced in an instance-level, almost flat subset of the Minizinc modelling language. 
+The Minizinc output follows the Minion output as closely as possible. The \texttt{mzn2fzn} tool can then be used to translate
+the problem instance for use with a number of different solvers. 
+\end{itemize}
+
+The second translation pipeline does not instantiate the model, instead it performs
+class-level reformulation and flattening. This pipeline is experimental and incomplete. There is one backend 
+that produces Dominion Input Language for the Dominion solver synthesiser.
+
+\textsc{Minion} is well supported by \savilerow so we will use \textsc{Minion} as the reference
+in this document. {\sc Minion} is a fast scalable constraint solver. 
+However, modelling problems directly in {\sc Minion}'s input
+language is time-consuming and tedious because of its 
+primitive structure (it can be compared to writing a 
+complex program in assembly language).
+
+\section{Installing and Running \savilerow}
+
+\savilerow is distributed as an archive with the following contents: 
+
+\begin{itemize}
+\item The Java source code (in {\tt src}) licensed with GPL 3.
+\item The compiled classes in a JAR file named {\tt savilerow.jar}.
+\item Executable scripts {\tt savilerow} and {\tt savilerow.bat} for running \savilerow.
+\item This document and the \eprime description, in {\tt doc}.
+\item Various example \eprime files and parameter files, in {\tt examples}.
+\item Required Java libraries in {\tt lib}
+\item The Minion solver 1.8 in {\tt bin}
+\end{itemize}
+
+Three archives are provided for Linux, Mac and Windows. These are largely the same,
+with the main difference being the Minion executable. 
+
+A recent version of Java is required on all platforms. The included JAR file was
+compiled with Oracle Java 1.7. 
+
+\subsection{Running \savilerow on Linux and Mac}
+
+Download the appropriate archive and unpack it somewhere convenient. Open a 
+terminal and navigate to the \savilerow directory.  
+Use the script named \texttt{savilerow}. One of
+the simplest ways of running \savilerow is given below.
+
+\begin{verbatim}
+./savilerow problemFile.eprime parameterFile.param
+\end{verbatim}
+
+The first argument is the problem class file. This 
+is a plain text file containing the constraint problem, expressed in the \eprime
+language. 
+
+The second argument ({\tt parameterFile.param}) is the parameter file (again in the 
+\eprime language). This contains the data for the problem instance. 
+The parameter file can be omitted if the problem has no parameters (no \texttt{given} statements in 
+the preamble). 
+
+\subsection{Running \savilerow on Windows}
+
+Download the appropriate archive and unpack it somewhere convenient. 
+Start \texttt{cmd.exe} and navigate to the \savilerow folder. 
+Use the script named \texttt{savilerow.bat}. Command line options are identical 
+to the Linux and Mac version. One of the simplest ways of running \savilerow is the following:
+
+\begin{verbatim}
+savilerow.bat problemFile.eprime parameterFile.param
+\end{verbatim}
+
+
+\subsection{Solution Files}
+
+For the Minion, SAT and Gecode backends, \savilerow is able to run the solver and parse the solution (or set of solutions) 
+produced by the solver. These solutions are translated back into \eprime.  
+For each \texttt{find} statement in the model file (i.e.\ each statement that declares decision variables), 
+the solution file contains
+a matching \texttt{letting} statement. For example, if the model file contains the following \texttt{find} statement:
+
+\begin{verbatim}
+find M : matrix indexed by [int(1..2), int(1..2)] of int(1..5)
+\end{verbatim}
+
+The solution file could contain the following \texttt{letting} statement. 
+
+\begin{verbatim}
+letting M = [ [2,3 ; int(1..2)],
+              [1,2 ; int(1..2)]
+              ; int(1..2) ]
+\end{verbatim}
+
+\subsection{File Names}\label{sub:filenames}
+
+The input files for \savilerow typically have the extensions \texttt{.eprime} and \texttt{.param}.
+These extensions allow \savilerow to identify the model and parameter file on the 
+command line. If these files have a different extension (or no extension) then
+\savilerow must be called in a slightly different way:
+
+\begin{verbatim}
+./savilerow -in-eprime problemFile -in-param parameterFile
+\end{verbatim}
+
+Given input file names \texttt{<problemFile>} and \texttt{<parameterFile>}, output files have the following
+names by default.
+
+\begin{itemize}
+\item For Minion output, \texttt{<parameterFile>.minion} (or if there is no parameter file, 
+\texttt{<problemFile>.minion}).
+\item For Gecode output, \texttt{<parameterFile>.fzn} (or if there is no parameter file, 
+\texttt{<problemFile>.fzn}).
+\item For SAT output, \texttt{<parameterFile>.dimacs} (or if there is no parameter file, 
+\texttt{<problemFile>.dimacs}).
+\item For Minizinc output, \texttt{<parameterFile>.mzn} (or if there is no parameter file, 
+\texttt{<problemFile>.mzn}).
+\item For Dominion output, there is typically no parameter file so the output file is named
+after the problem file. If the problem file ends with \texttt{.eprime}, then the extension
+is removed. The extension \texttt{.dominion} is added. 
+\end{itemize}
+
+\begin{sloppypar}
+When \savilerow parses a single solution from the output of a solver, it produces a file named
+\texttt{<parameterFile>.solution} (or if there is no parameter file, 
+\texttt{<problemFile>.solution}). When there are multiple solutions (e.g.\ when using
+the \texttt{-all-solutions} flag) the solution files are numbered (for example, 
+nurses.param.solution.000001 to nurses.param.solution.000871). 
+
+If \savilerow runs Minion or a SAT solver it produces a file \texttt{<parameterFile>.info} (or if there is no parameter file, 
+\texttt{<problemFile>.info}) containing solver statistics.
+
+Finally, a file named \texttt{<parameterFile>.aux}
+(or \texttt{<problemFile>.aux}) is also created. This contains the symbol table
+and is read if \savilerow is called a second time to parse a solution. 
+\end{sloppypar}
+
+\subsection{Command Line Options}
+
+
+
+\subsubsection{Mode}
+
+\savilerow has two modes of operation, Normal and ReadSolution.  Normal is the
+default, and in this mode \savilerow reads an \eprime model file and optional
+parameter file and produces output for some solver. In some cases it will also 
+run a solver and parse the solution(s), producing \eprime solution files. 
+
+In ReadSolution mode, \savilerow reads a Minion solution table file. The solution
+table file is created by running Minion with its \texttt{-solsout} flag.  The solution
+or solutions saved by Minion are converted to \eprime solution files. In the process,
+any decision variables that were removed by \savilerow are restored, and all 
+auxiliary variables that were introduced by \savilerow are removed.  
+
+The mode is specified as follows.
+
+\begin{verbatim}
+-mode [Normal | ReadSolution]
+\end{verbatim}
+
+\subsubsection{Specifying input files}
+
+The options \texttt{-in-eprime} and \texttt{-in-param} specify the input files
+as in the example below. 
+
+\begin{verbatim}
+savilerow -in-eprime sonet.eprime -in-param sonet1.param
+\end{verbatim}
+
+These flags may be omitted if the filenames end with \texttt{.eprime} and \texttt{.param} respectively. 
+
+The option \texttt{-params} may be used to specify the parameters on the command
+line. For example, suppose the \texttt{nurse.eprime} model has two parameters. We 
+can specify them on the command line as follows. The format of the parameter string
+is identical to the format of a parameter file (where, incidentally, the \texttt{language} line is optional).
+
+{\footnotesize
+\begin{verbatim}
+savilerow -in-eprime nurse.eprime -params "letting n_nurses=4 letting Demand=[[1,0,1,0],[0,2,1,0]]"
+\end{verbatim}}
+
+\subsubsection{Specifying output format}
+
+In Normal mode, there are five output formats as described in Section~\ref{sub:backends}. The
+output format is specified using one of the following five command-line options. 
+
+\begin{verbatim}
+-minion
+-gecode
+-sat
+-minizinc
+-dominion
+\end{verbatim}
+
+The output filename may be specified as follows. In each case there is a default
+filename so the flag is optional. Default filenames are described in Section~\ref{sub:filenames}.
+
+\begin{verbatim}
+-out-minion <filename>
+-out-gecode <filename>
+-out-sat <filename>
+-out-minizinc <filename>
+-out-dominion <filename>
+\end{verbatim}
+
+In addition, the file names for solution files, solver statistics files and 
+aux files may be 
+specified as follows. Once again there are default filenames described in Section~\ref{sub:filenames}.
+
+\begin{verbatim}
+-out-solution <filename>
+-out-info <filename>
+-out-aux <filename>
+\end{verbatim}
+
+\subsubsection{Optimisation Levels}
+
+The optimisation levels (\verb|-O0| to \verb|-O3|) provide an easy way to control
+how much optimisation \savilerow does, without having to switch on or off individual
+optimisations. The default is \verb|-O2|, which is intended to provide a generally
+recommended set of optimisations. The rightmost \texttt{-O} flag on the command line
+is the one that takes precedence. 
+
+\begin{verbatim}
+-O0
+\end{verbatim}
+
+The lowest optimisation level, \texttt{-O0}, turns off all optional optimisations.
+\savilerow will still simplify expressions (including constraints). Any expression containing
+only constants will be replaced with its value. Some expressions have quite sophisticated 
+simplifiers that will run even at \texttt{-O0}. For example, \texttt{allDiff([x+y+z, z+y+x, p, q])}
+would simplify to \texttt{false} because the first two expressions in the \texttt{allDiff} are
+symbolically equal after normalisation. \texttt{-O0} will do no common subexpression 
+elimination, will not unify equal variables, and will not filter the domains of
+variables. 
+
+\begin{verbatim}
+-O1
+\end{verbatim}
+
+\texttt{-O1} does optimisations that are very efficient in both space and time. 
+Variables that are equal are unified, and a form of common subexpression elimination
+is applied (Active CSE, described below). 
+
+\begin{verbatim}
+-O2
+\end{verbatim}
+
+In addition to the optimisations performed by \texttt{-O1}, \texttt{-O2} performs
+filtering of variable domains and aggregation (both of which are described in the 
+following section).  \texttt{-O2} is the default optimisation level. 
+
+\begin{verbatim}
+-O3
+\end{verbatim}
+
+In addition to the optimisations performed by \texttt{-O2}, \texttt{-O3} enables
+associative-commutative common subexpression elimination (described below). 
+
+
+\subsubsection{Translation Options}
+
+\subsubsection*{Common Subexpression Elimination}
+
+\savilerow currently implements four types of common subexpression elimination (CSE). 
+Identical CSE finds and eliminates syntactically identical expressions. This
+is the simplest form of CSE, however it can be an effective optimisation.
+Active CSE performs some reformulations (for example applying De Morgan's laws)
+to reveal expressions that are semantically equivalent but not syntactically 
+identical. Active CSE subsumes Identical CSE. Active CSE is enabled by default as part of \texttt{-O2}.
+Associative-Commutative CSE (AC-CSE) works on the associative and commutative (AC) operators
+\texttt{+}, \texttt{*}, \verb1/\1 (and) and \verb1\/1 (or). It is able to
+rearrange the AC expressions to reveal common subexpressions among them. 
+AC-CSE is not enabled by default. It would normally be used in conjunction with
+Identical or Active CSE. 
+Finally, Active AC-CSE combines one active reformulation (integer negation) with
+AC-CSE, so for example Active AC-CSE is able to extract $y-z$ from the three expressions
+$x+y-z$, $w-x-y+z$, and $10-y+z$, even though the sub-expression occurs as $y-z$ in one
+and $z-y$ in the other two. Active AC-CSE is identical to AC-CSE for And, Or and
+Product, it differs only on sum. 
+
+The following flags control CSE. The first, \texttt{-no-cse}, turns off all CSE. 
+The other flags each turn on one type of CSE. 
+
+\begin{verbatim}
+-no-cse
+-identical-cse
+-active-cse
+-ac-cse
+-active-ac-cse
+\end{verbatim}
+
+\subsubsection*{Variable Deletion}
+
+\savilerow can remove a decision variable (either variables declared with \texttt{find} or
+auxiliary variables introduced during tailoring) when the variable is equal to a 
+constant, or equal to another variable. This is often a useful optimisation. It can be
+enabled using the following flag. 
+
+\begin{verbatim}
+-deletevars
+\end{verbatim}
+
+\subsubsection*{Domain Filtering}
+
+\begin{sloppypar}
+It can be useful to filter the domains of variables. In \savilerow this is done by
+running the translation pipeline to completion and producing a Minion file, then 
+running Minion usually with the options \texttt{-preprocess SACBounds -outputCompressedDomains}.
+With these options Minion performs conventional propagation plus SAC on the 
+lower and upper bound of each variable (also known as shaving). The filtered
+domains are then read back in to \savilerow. The translation process is started again
+at the beginning.  Thus domain filtering can benefit the entire translation process:
+variables can be removed (with \texttt{-deletevars}), constraint expressions can be
+simplified or even removed (if they are entailed), the number of auxiliary variables may be reduced.
+In some cases domain filtering can enable another optimisation, for example on
+the BIBD problem it enables associative-commutative CSE to do some very effective
+reformulation. 
+\end{sloppypar}
+
+Domain filtering can be used with Minion, Gecode, SAT and Minizinc output (but Minion
+is always used to perform the domain filtering regardless of the output solver). It is 
+switched on using the following flag. 
+
+\begin{verbatim}
+-reduce-domains
+\end{verbatim}
+
+Standard domain filtering affects the decision variables defined by \texttt{find} statements.
+Auxiliary variables created by \savilerow are not filtered by default. To enable 
+filtering of both \texttt{find} variables and auxiliary variables, use the following flag:
+
+\begin{verbatim}
+-reduce-domains-extend
+\end{verbatim}
+
+If the problem instance contains variables with very large domains, the level of
+consistency is reduced from SACBounds to Minion's conventional propagation.  
+
+\subsubsection*{Aggregation of Constraints}
+
+Aggregation collects sets of constraints together to form global constraints
+that typically propagate better in the target solver. At present there are two
+aggregators for allDifferent and GCC. \savilerow
+constructs allDifferent constraints by collecting not-equal, less-than and 
+other shorter allDifferent constraints. GCC is aggregated by collecting \texttt{atmost} and
+\texttt{atleast} constraints over the same scope. 
+
+\begin{verbatim}
+-aggregate
+\end{verbatim}
+
+\subsubsection*{Mappers}
+
+The Dominion constraint solver synthesiser has mappers (also known as views) in 
+its input language. By default \savilerow will use these whenever possible. The
+following two flags control the use of mappers -- the first switches mappers off 
+completely, and the second allows mappers to be used only where Minion can use them.
+For example, multiplication-by-a-constant mappers are allowed on variables in a sum constraint,
+because Minion has weighted sum constraints (which, incidentally, are built from  
+sum constraints using mappers). 
+
+\begin{verbatim}
+-nomappers
+-minionmappers
+\end{verbatim}
+
+\subsubsection*{Variable Types}
+
+When creating Minion output \savilerow will by default use the \texttt{DISCRETE} or \texttt{BOOL} variable type
+when the variable has fewer than 10,000 values and \texttt{BOUND} otherwise. 
+\texttt{DISCRETE} and \texttt{BOOL} represent the entire domain and \texttt{BOUND} only stores the
+upper and lower bound, thus propagation may be lost when using \texttt{BOUND}. 
+The following flag causes \savilerow to use \texttt{DISCRETE} variables only. 
+
+\begin{verbatim}
+-no-bound-vars
+\end{verbatim}
+
+\subsubsection{Controlling \savilerow}
+
+The following flag specifies a time limit in milliseconds. \savilerow will stop 
+when the time limit is reached, unless it has completed tailoring and is 
+running a solver to find a solution. The time measured is wallclock time not 
+CPU time. 
+
+\begin{verbatim}
+-timelimit <time>
+\end{verbatim}
+
+If \savilerow runs Minion it may be useful to add the following flag to limit
+Minion's run time, where \texttt{<time>} is in seconds.
+
+\begin{verbatim}
+-solver-options "-cpulimit <time>"
+\end{verbatim}
+
+A similar approach can be used to apply a time limit to Gecode and SAT solvers. 
+
+\subsubsection{Solver Control}
+
+The following flag causes \savilerow to run a solver and parse the solutions produced by it. 
+This is currently implemented for Minion, Gecode and SAT backends. 
+
+\begin{verbatim}
+-run-solver
+\end{verbatim}
+
+The following two flags control the number of solutions. 
+The first causes the solver to search for
+all solutions (and \savilerow to parse all solutions). The second specifies a 
+required number of solutions. 
+
+\begin{verbatim}
+-all-solutions
+-num-solutions <n>
+\end{verbatim}
+
+When parsing solutions the default behaviour is to create one file 
+for each solution. As an alternative, the following flag will send solutions 
+to standard out, separated by lines of 10 minus signs. 
+
+\begin{verbatim}
+-solutions-to-stdout
+\end{verbatim}
+
+The following flag passes through command-line options to the solver. The string
+would normally be quoted. 
+
+\begin{verbatim}
+-solver-options <string>
+\end{verbatim}
+
+For example when using Minion \texttt{-solver-options "-cpulimit <time>"} may
+be used to impose a time limit, or when using Gecode \texttt{-solver-options "-p 8"}
+causes Gecode to parallelise to 8 cores. 
+
+\subsubsection{Solver Control -- Minion}
+
+The following flag specifies where the Minion executable is. The default value
+is \texttt{minion}. 
+
+\begin{verbatim}
+-minion-bin <filename>
+\end{verbatim}
+
+When Minion is run directly by \savilerow, preprocessing is usually 
+applied before search starts. The following flag allows the level of 
+preprocessing to be specified. 
+
+\begin{verbatim}
+-preprocess LEVEL 
+    where LEVEL is one of None, GAC, SAC, SSAC, SACBounds, SSACBounds
+\end{verbatim}
+
+The default level of preprocessing is SACBounds unless there are large
+variable domains, in which case the default is GAC. 
+
+The \texttt{-preprocess} flag affects the behaviour of Minion in two cases: first 
+when Minion is called to filter domains (the \texttt{-reduce-domains} option), and 
+second when Minion is called to search for a solution. 
+
+\subsubsection{Solver Control -- Gecode}
+
+The following flag specifies where the Gecode executable is. The default value
+is \texttt{fzn-gecode}. 
+
+\begin{verbatim}
+-gecode-bin <filename>
+\end{verbatim}
+
+\subsubsection{Solver Control -- SAT Solvers}
+
+\savilerow is able to run and parse the output of MiniSAT and Lingeling solvers. The 
+following flag specifies which family of solvers is used. Lingeling is the default. 
+
+\begin{verbatim}
+-sat-family [minisat | lingeling]
+\end{verbatim}
+
+The following flag specifies where the SAT solver executable is. The default value
+is \texttt{lingeling} or \texttt{minisat}, depending on the SAT family. 
+
+\begin{verbatim}
+-satsolver-bin <filename>
+\end{verbatim}
+
+In some cases the SAT output is very large and this can be inconvenient. The following
+option allows the number of clauses to be limited. If the specified number of 
+clauses is reached, \savilerow will delete the partial SAT file and exit. 
+
+\begin{verbatim}
+-cnflimit <numclauses>
+\end{verbatim}
+
+%-sat-decomp-cse
+%-sat-alt
+
+\subsubsection{Parsing Solutions}
+
+Finally, when using ReadSolution mode, \savilerow will read a solution in Minion
+format and translate it back to \eprime. This allows the user to run Minion
+separately from \savilerow but still retrieve the solution in \eprime format. 
+When running Minion, the \texttt{-solsout} flag should be used to retrieve the
+solution(s) in a table format. 
+
+When using ReadSolution mode, the name of the aux file previously 
+generated by \savilerow needs to be specified using the \texttt{-out-aux} flag,
+so that \savilerow can read its symbol table. Also the name of the solution table file
+from Minion is specified using \texttt{-minion-sol-file}. \texttt{-out-solution} 
+is required to specify where to write the solutions. \texttt{-all-solutions} and 
+\texttt{-num-solutions <n>} are optional in ReadSolution mode. 
+Below is a typical command. 
+
+\begin{verbatim}
+savilerow -mode ReadSolution -out-aux <filename> -minion-sol-file <filename> 
+                             -out-solution <filename>
+\end{verbatim}
+
+When neither \texttt{-all-solutions} nor \texttt{-num-solutions <n>} is given,
+\savilerow parses the last solution in the Minion solutions file. For optimisation 
+problems, the last solution will be the optimal or closest to optimal. 
+
+
+\appendix
+
+\section*{Appendices}
+
+\section{SAT Encoding} \label{app:satenc}
+
+We have used standard encodings from the literature such as the order encoding for sums~\cite{tamura2009compiling} and support encoding~\cite{gent-encodings-02} for binary constraints. Also we do not attempt to encode all constraints in the language: several constraint types are decomposed before encoding to SAT. 
+
+\subsection{Encoding of CSP variables}
+
+The encoding of a CSP variable provides SAT literals for facts about the variable: $[x=a]$, $[x\ne a]$, $[x\le a]$ and $[x>a]$ for a CSP variable $x$ and value $a$.
+CSP variables are encoded in one of three ways. If the variable has only two values, it is represented with a single SAT variable. All the above facts (for both values) map to the SAT variable, its negation, \textit{true} or \textit{false}. If the CSP variable is contained in only sums, then only the order literals $[x\le a]$ and $[x>a]$ are required. Using the language of the \textit{ladder} encoding of Gent et al~\cite{GentIP:alldiff-to-sat}, we have only the ladder variables and the clauses in Gent et al formula (2). Otherwise we use the full ladder encoding with the clauses in formulas (1), (2) and (3) of Gent et al. Also, for the maximum value $\mathrm{max}(D(x))$ the facts $[x\ne \mathrm{max}(D(x))]$ and $[x<\mathrm{max}(D(x))]$ are equivalent so one SAT variable is saved. Finally, a variable may have gaps in its domain. Suppose variable $x$ has domain $D(x)=\{1\ldots 3, 8\ldots 10\}$. SAT variables are created only for the 6 values in the domain. Facts containing values $\{4\ldots 7\}$ are mapped appropriately (for example $[x\le 5]$ is mapped to $[x\le 3]$).
+The encoding has $2|D(x)|-1$ SAT variables.
+
+\subsection{Decomposition}
+
+The first step is decomposition of the constraints AllDifferent, GCC, Atmost and  Atleast. All are decomposed into sums of equalities and we have one sum for each relevant domain value. For example to decompose AllDifferent($[x,y,z]$), for each domain value $a$ we have $(x=a)+(y=a)+(z=a)\le 1$.  These decompositions are done after AC-CSE if AC-CSE is enabled (because the large number of sums generated hinders the AC-CSE algorithm) and before Identical and Active CSE. 
+
+The second step is decomposition of lexicographic ordering constraints. We use the decomposition of Frisch et al~\cite{frisch:GACLex} (Sec.4) with implication rewritten as disjunction, thus the conjunctions of equalities in Frisch et al become disjunctions of disequalities. This decomposition is also done after AC-CSE and before Identical and Active CSE. However, if AC-CSE is switched on, we (independently) apply AC-CSE to the decomposition, thus extracting common sets of disequalities from the disjunctions. 
+
+The third step occurs after all flattening is completed. The constraints min, max and element are decomposed. For $\mathrm{min}(V)=z$ we have $V[1]=z \vee V[2]=z \ldots$ and $z\le V[1] \wedge z\le V[2] \ldots$. Max is similar to min with $\le$ replaced by $\ge$. The constraint $\mathrm{element}(V, x)=z$ becomes $\forall i : (x\ne i \vee V[i]=z)$. 
+
+\subsection{Encoding of Constraints}
+
+Now we turn to encoding of constraints. Some simple expressions such as $x=a$, $x\le a$ and $\neg x$ (for CSP variable $x$ and value $a$) may be represented with a single SAT literal. We have introduced a new expression type named SATLiteral. Each expression that can be represented as a single literal is replaced with a SATLiteral in a final rewriting pass before encoding constraints. SATLiterals behave like boolean variables hence they can be transparently included in any constraint expression that takes a boolean subexpression. 
+
+For sums we use the order encoding~\cite{tamura2009compiling} and to improve scalability sums are broken down into pieces with at most three variables.  Sum-equal constraints are split into sum-$\le$ and sum-$\ge$ before encoding. For other constraints we used the standard support encoding wherever possible~\cite{gent-encodings-02}. Binary constraints such as $|x|=y$ use the support encoding, and ternary functional constraints $x\diamond y=z$ (eg $x\times y=z$) use the support encoding when $z$ is a constant. Otherwise, $x\diamond y=z$ are encoded as a set of ternary SAT clauses: $\forall i \in D(x), \forall j \in D(y): (x\ne i \: \vee\: y\ne j \: \vee\: z=i\diamond j)$. When $i\diamond j$ is not in the domain of $z$, the literal $z=i\diamond j$ will be false. 
+Logical connectives such as $\wedge, \vee, \leftrightarrow$ have custom encodings and table constraints use Bacchus' encoding~\cite{bacchus2007gac} (Sec.2.1). 
+
+
+\bibliographystyle{plain}
+\bibliography{general}
+
+
+\end{document}
+
+

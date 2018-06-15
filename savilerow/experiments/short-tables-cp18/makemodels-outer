@@ -1,0 +1,3 @@
+#!/bin/bash
+
+./makemodels | sort -R | parallel -j32

@@ -1,0 +1,31 @@
+\begin{thebibliography}{1}
+
+\bibitem{essence-journal-08}
+Alan~M. Frisch, Warwick Harvey, Chris Jefferson, Bernadette~Mart'inez
+  Hern\'andez, and Ian Miguel.
+\newblock {ESSENCE}: A constraint language for specifying combinatorial
+  problems.
+\newblock {\em Constraints}, 13(3):268--306, 2008.
+
+\bibitem{nightingale2014automatically}
+Peter Nightingale, {\"O}zg{\"u}r Akg{\"u}n, Ian~P Gent, Christopher Jefferson,
+  and Ian Miguel.
+\newblock Automatically improving constraint models in {Savile Row} through
+  associative-commutative common subexpression elimination.
+\newblock In {\em 20th International Conference on Principles and Practice of
+  Constraint Programming ({CP} 2014)}, pages 590--605. Springer, 2014.
+
+\bibitem{nightingale2015automatically}
+Peter Nightingale, Patrick Spracklen, and Ian Miguel.
+\newblock Automatically improving {SAT} encoding of constraint problems through
+  common subexpression elimination in {Savile Row}.
+\newblock In {\em Proceedings of the 21st International Conference on
+  Principles and Practice of Constraint Programming ({CP} 2015)}, pages
+  330--340, 2015.
+
+\bibitem{opl-book}
+Pascal Van~Hentenryck.
+\newblock {\em The OPL Optimization Programming Language}.
+\newblock MIT Press, Cambridge, MA, USA, 1999.
+
+\end{thebibliography}

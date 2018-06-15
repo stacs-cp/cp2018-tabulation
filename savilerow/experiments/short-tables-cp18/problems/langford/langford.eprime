@@ -1,0 +1,30 @@
+language ESSENCE' 1.0
+
+given n : int    $ n symbols.
+given k : int    $ k repetitions of each symbol. 
+
+find position : matrix indexed by [int(1..n), int(1..k)] of int(1..n*k)
+
+such that
+    allDiff(flatten(position)),
+    
+$    forAll i : int(1..n-1) .  $ for each symbol
+$    forAll i2 : int(i+1..n) . 
+$    makeTable(
+$        (forAll j : int(2..k) .   $ for each instance of that number
+$            position[i,j] = position[i,j-1]+i+1) /\
+$        (forAll j : int(2..k) .   $ for each instance of that number
+$            position[i2,j] = position[i2,j-1]+i2+1) /\
+$            allDiff(flatten([ [position[i,j], position[i2,j]] | j : int(1..k)]))
+$            ),
+
+    forAll i : int(1..n) .  $ for each symbol
+        forAll j : int(2..k) .   $ for each instance of that number
+            position[i,j] = position[i,j-1]+i+1,
+    
+    $  Prevent the sequence being reversed -- the first 1 must be closer 
+    $  to the start of the sequence than the last 1 is to the end. 
+    position[1,1]-1 <= n*k-position[1,k],
+    
+    true
+    

@@ -1,0 +1,18 @@
+To replicate experiments from CP 2018 paper:
+Unpack this archive on a linux machine.
+
+Install the fzn-chuffed executable in the path (Minion is included already).
+
+Install GNU parallel.
+
+Go into the experiments/short-tables-cp18/ directory
+
+Do:
+./makemodels-outer >log 2>error
+
+This will start 32 processes and probably take several days to complete.
+
+Results can be collected using ./collect-for-r in the same folder, and loaded into R and plotted using the analyse-collected-table.r script.
+
+Results plotted in the paper are in the table-* files.
+

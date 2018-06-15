@@ -1,0 +1,10 @@
+#!/bin/bash
+
+cat problems/*/*.baselinechuf.*.infor > table-chuffed-baseline
+cat problems/*/*.tabulatechuf.*.infor > table-chuffed-tabulate
+
+cat problems/*/*.baselinect.*.infor > table-conflict-baseline
+cat problems/*/*.tabulatect.*.infor > table-conflict-tabulate
+
+cat problems/*/*.baselinetrie.*.infor > table-static-baseline
+cat problems/*/*.tabulatetrie.*.infor > table-static-tabulate
